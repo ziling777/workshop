@@ -5,20 +5,54 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer;
+import org.apache.flink.util.Preconditions;
+import com.amazonaws.services.kinesisanalytics.runtime.KinesisAnalyticsRuntime;
+import java.util.Map;
+import java.util.Properties;
+
 
 import java.util.Properties;
 
 public class DataStreamJob {
-
+    
+    public static final String MSKBOOTSTRAP_SERVERS_KEY = "MSKBootstrapServers";
+    
     public static void main(String[] args) throws Exception {
         // 创建 Flink 流执行环境
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        // 设置 Kafka 消费者属性
-        Properties properties = new Properties();
-        properties.setProperty("bootstrap.servers", "b-3.mskclustermskconnectla.rvmf3c.c7.kafka.us-east-2.amazonaws.com:9092");
-        properties.setProperty("group.id", "signal-parser");
+        // Get application properties
+        Map<String, Properties> applicationProperties = KinesisAnalyticsRuntime.getApplicationProperties();
+        System.out.println("applicationProperties size: " + applicationProperties.size());
+        
+        System.out.println("\nApplicationProperties:");
+        for (Map.Entry<String, Properties> entry : applicationProperties.entrySet()) {
+            String key = entry.getKey();
+            Properties props = entry.getValue();
+            System.out.println("- " + key + ":");
+            props.list(System.out);
+            System.out.println();
+        }
+        
+        Properties consumerConfigProperties = applicationProperties.get("flinkapp");
+        
+    
+        // 从应用程序属性中获取 MSK Bootstrap Servers 地址
+        String bootstrapServers = null;
+        if (consumerConfigProperties != null) {
+            bootstrapServers = consumerConfigProperties.getProperty(MSKBOOTSTRAP_SERVERS_KEY);
+        }
+        
+    
+        // 检查 MSK Bootstrap Servers 地址是否存在
+        Preconditions.checkNotNull(bootstrapServers, MSKBOOTSTRAP_SERVERS_KEY + " configuration missing");
 
+ 
+         // 设置 Kafka 消费者属性
+        Properties properties = new Properties();
+        properties.setProperty("bootstrap.servers", bootstrapServers);
+        properties.setProperty("group.id", "signal-parser");
+        
         // 创建 Kafka 消费者
         FlinkKafkaConsumer<String> consumer = new FlinkKafkaConsumer<>(
                 "ID268SystemPower",
@@ -34,8 +68,7 @@ public class DataStreamJob {
             byte[] rawBytes = hexStringToByteArray(rawData);
             StringBuilder sb = new StringBuilder();
             for (SignalDefinition signal : SignalDefinition.values()) {
-                double signalValue = parseSignal(rawBytes, signal);
-                sb.append(signal.name()).append(": ").append((long) signalValue).append("|");
+                sb.append(parseSignal(rawBytes, signal)).append("|");
             }
             return sb.toString();
         });
@@ -48,7 +81,7 @@ public class DataStreamJob {
     }
 
     // 从字节数组解析信号值
-    private static double parseSignal(byte[] rawBytes, SignalDefinition signal) {
+    private static String parseSignal(byte[] rawBytes, SignalDefinition signal) {
         int startBit = signal.getStartBit();
         int length = signal.getLength();
         boolean isSigned = signal.isSigned();
@@ -66,13 +99,22 @@ public class DataStreamJob {
             signalValue |= ((long) (rawBytes[i] & 0xFF)) << shift;
         }
 
-        signalValue = (signalValue >>> bitOffset) & ((1L << length) - 1);
-        if (isSigned && (signalValue >> (length - 1)) != 0) {
-            signalValue |= (-1L) << length;
+        long signedSignalValue;
+        if (isSigned) {
+            int signBitIndex = length - 1;
+            long signBit = (signalValue >> signBitIndex) & 1;
+            long signExtension = (signBit == 0) ? 0 : ~((1L << signBitIndex) - 1);
+            signedSignalValue = (signalValue & ((1L << signBitIndex) - 1)) | (signExtension << signBitIndex);
+            signedSignalValue = (signedSignalValue >> bitOffset);
+        } else {
+            signedSignalValue = (signalValue >> bitOffset) & ((1L << length) - 1);
         }
 
-        double scaledValue = signalValue * scale;
-        return Math.round(Math.max(Math.min(scaledValue, maximum), minimum));
+        double scaledValue = signedSignalValue * scale;
+        double clampedValue = Math.max(Math.min(scaledValue, maximum), minimum);
+        boolean isValueClamped = clampedValue != scaledValue;
+
+        return signal.name() + ": " + (long) clampedValue + (isValueClamped ? " (clamped)" : "");
     }
 
     // 将十六进制字符串转换为字节数组
@@ -88,7 +130,7 @@ public class DataStreamJob {
 
     // 信号定义枚举
     private enum SignalDefinition {
-        SystemRegenPowerMax268(32, 8, true, -100, 155, 1),
+        SystemRegenPowerMax268(32, 8, true, -128, 127, 1),
         SystemDrivePowerMax268(16, 9, false, 0, 511, 1),
         DI_primaryUnitSiliconType(26, 1, false, 0, 1, 1),
         SystemHeatPowerMax268(0, 8, false, 0, 31875, 0.08),

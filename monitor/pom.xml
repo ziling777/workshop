@@ -9,7 +9,7 @@
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <flink.version>1.14.4</flink.version>
+        <flink.version>1.16.2</flink.version>
         <scala.binary.version>2.12</scala.binary.version>
         <java.version>1.8</java.version>
         <aws.java.sdk.version>1.12.172</aws.java.sdk.version>
@@ -24,16 +24,16 @@
             <artifactId>flink-java</artifactId>
             <version>${flink.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-streaming-java_${scala.binary.version}</artifactId>
-            <version>${flink.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-connector-kafka_${scala.binary.version}</artifactId>
-            <version>${flink.version}</version>
-        </dependency>
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-streaming-java</artifactId>
+			<version>${flink.version}</version>
+		</dependency>
+		<dependency>
+		    <groupId>org.apache.flink</groupId>
+		    <artifactId>flink-connector-kafka</artifactId>
+		    <version>${flink.version}</version>
+		</dependency>
 
         <!-- AWS SDK dependencies -->
         <dependency>

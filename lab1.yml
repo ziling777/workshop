@@ -1,0 +1,411 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  KDAApplicationCodeBucketName:
+    Type: String
+    Description: S3 Bucket containing the application code
+  
+  KDAApplicationCodeKey:
+    Type: String
+    Description: The key for the application code object in the S3 bucket
+Mappings:
+  SubnetConfig:
+    VPC:
+      CIDR: '10.0.0.0/16'
+    PublicOne:
+      CIDR: '10.0.0.0/24'
+    PublicTwo:
+      CIDR: '10.0.1.0/24'
+    PrivateSubnetMSKOne:
+      CIDR: '10.0.2.0/24'
+    PrivateSubnetMSKTwo:
+      CIDR: '10.0.3.0/24'
+    PrivateSubnetMSKThree:
+      CIDR: '10.0.4.0/24'
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      CidrBlock: !FindInMap ['SubnetConfig', 'VPC', 'CIDR']
+      Tags:
+        - Key: 'Name'
+          Value: 'MMVPC'
+
+  PublicSubnetOne:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+         Fn::Select:
+         - 0
+         - Fn::GetAZs: {Ref: 'AWS::Region'}
+      VpcId: !Ref 'VPC'
+      CidrBlock: !FindInMap ['SubnetConfig', 'PublicOne', 'CIDR']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: 'Name'
+          Value: 'PublicSubnetOne'
+  PublicSubnetTwo:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+         Fn::Select:
+         - 1
+         - Fn::GetAZs: {Ref: 'AWS::Region'}
+      VpcId: !Ref 'VPC'
+      CidrBlock: !FindInMap ['SubnetConfig', 'PublicTwo', 'CIDR']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: 'Name'
+          Value: 'PublicSubnetTwo'
+  PrivateSubnetMSKOne:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+         Fn::Select:
+         - 0
+         - Fn::GetAZs: {Ref: 'AWS::Region'}
+      VpcId: !Ref 'VPC'
+      CidrBlock: !FindInMap ['SubnetConfig', 'PrivateSubnetMSKOne', 'CIDR']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: 'Name'
+          Value: 'PrivateSubnetMSKOne'
+  PrivateSubnetMSKTwo:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+         Fn::Select:
+         - 1
+         - Fn::GetAZs: {Ref: 'AWS::Region'}
+      VpcId: !Ref 'VPC'
+      CidrBlock: !FindInMap ['SubnetConfig', 'PrivateSubnetMSKTwo', 'CIDR']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: 'Name'
+          Value: 'PrivateSubnetMSKTwo'
+  PrivateSubnetMSKThree:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+         Fn::Select:
+         - 2
+         - Fn::GetAZs: {Ref: 'AWS::Region'}
+      VpcId: !Ref 'VPC'
+      CidrBlock: !FindInMap ['SubnetConfig', 'PrivateSubnetMSKThree', 'CIDR']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: 'Name'
+          Value: 'PrivateSubnetMSKThree'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway    
+  GatewayAttachement:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref 'VPC'
+      InternetGatewayId: !Ref 'InternetGateway'
+  NatGateway1EIP: 
+    Type: AWS::EC2::EIP
+    DependsOn: GatewayAttachement
+    Properties:
+      Domain: vpc
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: 
+        Fn::GetAtt:
+         - NatGateway1EIP
+         - AllocationId
+      SubnetId: !Ref PublicSubnetOne
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachement
+    Properties:
+      RouteTableId: !Ref 'PublicRouteTable'
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref 'InternetGateway'
+  PublicSubnetOneRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetOne
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnetTwoRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetTwo
+      RouteTableId: !Ref PublicRouteTable
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+  PrivateInternetRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NATGateway
+  PrivateSubnetMSKOneRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetMSKOne
+  PrivateSubnetMSKTwoRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetMSKTwo
+  PrivateSubnetMSKThreeRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetMSKThree
+      
+  MSKSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: MSK Security Group
+      VpcId: !Ref 'VPC'
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 2181
+        ToPort: 2181
+        SourceSecurityGroupId: !ImportValue 
+          'Fn::Sub': '${AWS::StackName}-Cloud9InstanceSecurityGroup'
+      - IpProtocol: tcp
+        FromPort: 9098
+        ToPort: 9098
+        SourceSecurityGroupId: !ImportValue 
+          'Fn::Sub': '${AWS::StackName}-Cloud9InstanceSecurityGroup'
+      - IpProtocol: tcp
+        FromPort: 9094
+        ToPort: 9094
+        SourceSecurityGroupId: !ImportValue 
+          'Fn::Sub': '${AWS::StackName}-Cloud9InstanceSecurityGroup'
+      - IpProtocol: tcp
+        FromPort: 9092
+        ToPort: 9092
+        SourceSecurityGroupId: !ImportValue 
+          'Fn::Sub': '${AWS::StackName}-Cloud9InstanceSecurityGroup'
+      - IpProtocol: tcp
+        FromPort: 2181
+        ToPort: 2181
+        SourceSecurityGroupId: !ImportValue 
+          'Fn::Sub': '${AWS::StackName}-Cloud9InstanceSecurityGroup'
+  MSKSelfIngressAllowRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref MSKSecurityGroup
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !Ref MSKSecurityGroup
+
+  Cloud9InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCloudFormationReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: MSKConfigurationAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: "VisualEditor0"
+                Effect: "Allow"
+                Action: "kafka:CreateConfiguration"
+                Resource: "*"
+        
+  Cloud9Instance:
+    Type: AWS::Cloud9::EnvironmentEC2
+    Properties:
+      InstanceType: t3.small
+      AutomaticStopTimeMinutes: 60
+      ConnectionType: CONNECT_SSM
+      Description: Cloud9 Environment for MSK Workshop
+      ImageId: amazonlinux-2-x86_64
+      Name: !Join ["-", ["cloud9-msk-workshop", !Ref "AWS::StackName"]]
+      SubnetId: !Ref PublicSubnetOne
+      OwnerArn: !Ref Cloud9InstanceRole
+  
+  KafkaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ['-', ['/aws/kafka', !Ref 'AWS::StackName']]
+      RetentionInDays: 7 # 设置日志保留天数
+
+
+  MSKConfiguration:
+    Type: AWS::MSK::Configuration
+    Properties:
+      Name: !Join ['-', ['msk-config', !Ref 'AWS::StackName']]
+      ServerProperties: |
+        # 在这里添加您的自定义 Kafka 配置属性
+        # 例如:
+        auto.create.topics.enable=true
+        default.replication.factor=3
+
+  MSKCluster:
+    Type: AWS::MSK::Cluster
+    Properties:
+      ClusterName: !Join ["-", ["MSKCluster", !Ref "AWS::StackName"]]
+      KafkaVersion: "2.8.1"
+      NumberOfBrokerNodes: 3
+      BrokerNodeGroupInfo:
+        ClientSubnets:
+          - !Ref PrivateSubnetMSKOne
+          - !Ref PrivateSubnetMSKTwo
+          - !Ref PrivateSubnetMSKThree
+        InstanceType: "kafka.t3.small"
+        SecurityGroups:
+          - !Ref MSKSecurityGroup
+      EncryptionInfo:
+        EncryptionAtRest:
+          DataVolumeKMSKeyId: "alias/aws/kafka"
+      EnhancedMonitoring: "DEFAULT"
+      OpenMonitoring:
+        Prometheus:
+          JmxExporter:
+            EnabledInBroker: true
+          NodeExporter:
+            EnabledInBroker: true
+      LoggingInfo:
+        BrokerLogs:
+          CloudWatchLogs:
+            Enabled: true
+            LogGroup: !Join ["-", ["msk-broker-logs", !Ref "AWS::StackName"]]
+      ConfigurationInfo:
+        Arn: !Ref MSKConfiguration
+        Revision: 1
+    DependsOn: 
+      - Cloud9Instance
+      - MSKConfiguration
+
+  KDASecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Kinesis Data Analytics Application
+      VpcId: !Ref 'VPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2181
+          ToPort: 2181
+          SourceSecurityGroupId: !Ref MSKSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 9092
+          ToPort: 9092
+          SourceSecurityGroupId: !Ref MSKSecurityGroup
+  KDAApplicationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: kinesisanalytics.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSKinesisAnalyticsFullAccess
+      Policies:
+        - PolicyName: MSKAccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kafka-cluster:DescribeCluster
+                Resource: !Join ['', ['arn:aws:kafka:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':cluster/', !Ref MSKCluster, '/*']]
+              - Effect: Allow
+                Action:
+                  - kafka-cluster:WriteData
+                  - kafka-cluster:ReadData
+                Resource: !Join ['', ['arn:aws:kafka:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':topic/', !Ref MSKCluster, '/*']]
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Join ['', ['arn:aws:s3:::', !Ref KDAApplicationCodeBucket, '/*']]
+        - PolicyName: VPCAccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                Resource: '*'
+
+  KDAApplicationCodeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref KDAApplicationCodeBucketName
+      VersioningConfiguration:
+        Status: Enabled
+
+
+  KDAApplication:
+    Type: AWS::KinesisAnalyticsV2::Application
+    Properties:
+      ApplicationName: !Join ['-', ['msk-kda-app', !Ref 'AWS::StackName']]
+      ApplicationDescription: Kinesis Data Analytics for Apache Flink Application
+      RuntimeEnvironment: FLINK-1.18
+      ServiceExecutionRole: !GetAtt KDAApplicationRole.Arn
+      ApplicationConfiguration:
+        ApplicationCodeConfiguration:
+          CodeContent:
+            S3ContentLocation:
+              BucketARN: !Ref KDAApplicationCodeBucket
+              FileKey: !Ref KDAApplicationCodeKey
+        EnvironmentProperties:
+          PropertyGroups:
+            - PropertyMap:  
+                MSKBootstrapServers: !Join [',', !Split [',', !GetAtt MSKCluster.BootstrapBrokerString.Brokers]]
+        ApplicationSnapshotConfiguration:
+          SnapshotsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnetMSKOne
+        - !Ref PrivateSubnetMSKTwo
+        - !Ref PrivateSubnetMSKThree
+
+Outputs:
+  MSKBootstrapBrokers:
+    Description: MSK Bootstrap Brokers String
+    Value: !Join [',', !Split [',', !GetAtt MSKCluster.BootstrapBrokerString.Brokers]]
+    
+  KDAApplicationCodeBucketNameOutput:
+    Description: KDA Application Code Bucket Name
+    Value: !Ref KDAApplicationCodeBucket
+
+  KDAApplicationCodeBucketArn:
+    Description: KDA Application Code Bucket ARN
+    Value: !GetAtt KDAApplicationCodeBucket.Arn
+
+  Cloud9InstanceSecurityGroup:
+    Description: Security Group for the EC2 instance hosting the Cloud9 environment
+    Value: !GetAtt Cloud9Instance.SecurityGroupIds
+    Export:
+      Name: !Sub "${AWS::StackName}-Cloud9InstanceSecurityGroup"

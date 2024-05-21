@@ -37,24 +37,26 @@ public class DataStreamJob {
     public static void main(String[] args) throws Exception {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        Properties kafkaProperties = new Properties();
         // 设置 Kafka 消费者属性
+        Properties properties = new Properties();
+        properties.setProperty("bootstrap.servers", "b-3.mskclustermskconnectla.rvmf3c.c7.kafka.us-east-2.amazonaws.com:9092");
+        properties.setProperty("group.id", "signal-parser");
 
-        FlinkKafkaConsumer<String> kafkaConsumer = new FlinkKafkaConsumer<>(
-                "ID268SystemPowerKV",
+        // 创建 Kafka 消费者
+        FlinkKafkaConsumer<String> consumer = new FlinkKafkaConsumer<>(
+                "ID268SystemPower",
                 new SimpleStringSchema(),
-                kafkaProperties
+                properties
         );
 
-        // 创建 AWS SNS 客户端实例
-        AmazonSNSAsync snsClient = AmazonSNSAsyncClientBuilder.defaultClient();
+        AmazonSNSAsync snsClient = SNSClientProvider.getSNSClient();
         String snsTopicArn = "arn:aws:sns:us-east-2:082526546443:vehiclemonitor";
 
-        env.addSource(kafkaConsumer)
+        env.addSource(consumer)
                 .map(DataStreamJob::parseVehiclePower)
                 .keyBy(VehiclePower::getVehicleId)
                 .process(new BatteryHeatMonitor(10000, 0.9))
-                .addSink(new SNSAlertSink(snsClient, snsTopicArn))
+                .addSink(new SNSAlertSink(snsTopicArn))
                 .setParallelism(1);
 
         env.execute("Vehicle Power Monitor");
@@ -141,18 +143,25 @@ public class DataStreamJob {
     }
 
     private static class SNSAlertSink implements SinkFunction<AlertMessage> {
-        private final AmazonSNSAsync snsClient;
         private final String snsTopicArn;
 
-        public SNSAlertSink(AmazonSNSAsync snsClient, String snsTopicArn) {
-            this.snsClient = snsClient;
+        public SNSAlertSink(String snsTopicArn) {
             this.snsTopicArn = snsTopicArn;
         }
 
         @Override
         public void invoke(AlertMessage alert, Context context) throws Exception {
+            AmazonSNSAsync snsClient = SNSClientProvider.getSNSClient();
             PublishRequest request = new PublishRequest(snsTopicArn, alert.getMessage());
             snsClient.publishAsync(request);
         }
+    }
+}
+
+class SNSClientProvider {
+    private static final AmazonSNSAsync snsClient = AmazonSNSAsyncClientBuilder.defaultClient();
+
+    public static AmazonSNSAsync getSNSClient() {
+        return snsClient;
     }
 }
