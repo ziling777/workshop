@@ -1,6 +1,0 @@
-org/example/DataStreamJob$SNSAlertSink.class
-org/example/DataStreamJob.class
-org/example/DataStreamJob$AlertMessage.class
-org/example/SNSClientProvider.class
-org/example/DataStreamJob$VehiclePower.class
-org/example/DataStreamJob$BatteryHeatMonitor.class
