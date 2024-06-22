@@ -11,7 +11,6 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as customResources from 'aws-cdk-lib/custom-resources';
 
 import { Construct } from 'constructs';
-import { UnauthenticatedAction } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 
 
 
@@ -24,9 +23,17 @@ export class CdkStack extends cdk.Stack {
       natGateways: 1
     });
 
-
     // Fetch the default security group ID
     const defaultSecurityGroupId = vpc.vpcDefaultSecurityGroup;
+
+    const securityGroup = ec2.SecurityGroup.fromSecurityGroupId(this, 'ImportedSecurityGroup', defaultSecurityGroupId);
+
+    // Update inbound rule
+    securityGroup.addIngressRule(
+      ec2.Peer.ipv4(vpc.vpcCidrBlock),
+      ec2.Port.allTraffic(),
+      'Allow internal access within the VPC'
+    );
 
     const privateSubnetIds = vpc.selectSubnets({
       subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
@@ -47,12 +54,19 @@ export class CdkStack extends cdk.Stack {
           },
         },
       },
-      clientAuthentication: 
+      clientAuthentication:
       {
         unauthenticated: {
             enabled: true
         }
       },
+      encryptionInfo: {
+        encryptionInTransit: {
+          inCluster: true,
+          clientBroker: 'PLAINTEXT'
+        }
+      }
+
       // Specify additional configurations (optional)
     });
 
@@ -149,7 +163,7 @@ export class CdkStack extends cdk.Stack {
     });
 
     const instanceProfileName = instanceProfile.instanceProfileName;
-    
+
     const emrClusterRole = new iam.Role(this, 'EmrClusterRole', {
       assumedBy: new iam.ServicePrincipal('elasticmapreduce.amazonaws.com'),
       managedPolicies: [
@@ -161,8 +175,8 @@ export class CdkStack extends cdk.Stack {
       subnetType: ec2.SubnetType.PUBLIC, // Change to your desired subnet type
     });
 
-    
-    // emr created security group will prevent cloudformation from deleting, due to the issue 
+
+    // emr created security group will prevent cloudformation from deleting, due to the issue
     // https://github.com/MoonsetJS/Moonset/issues/21
     const cluster = new emr.CfnCluster(this, 'vdpcluster', {
       instances: {
@@ -181,8 +195,8 @@ export class CdkStack extends cdk.Stack {
       name: 'MyEMRCluster',
       jobFlowRole: instanceProfileName ?? 'EMR_EC2_DefaultRole',
       serviceRole: emrClusterRole.roleName, // Ensure this role exists in your account
-      releaseLabel: 'emr-6.14.0',
-      applications: [{ name: 'HBase' }, { name: 'Flink' }, {name: 'Hue'}, {name: 'Phoenix'}] // Example applications
+      releaseLabel: 'emr-6.5.0',
+      applications: [{ name: 'HBase' }, { name: 'Flink' }] // Example applications
     });
 
     cluster.node.addDependency(instanceProfile);
