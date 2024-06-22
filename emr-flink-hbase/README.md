@@ -6,6 +6,10 @@ mvn clean package -Dscope.type=provided
 ```
 * 在 EMR Master 节点提交作业
 ```shell
+# 修改 /etc/flink/conf/flink-conf.yaml, 添加：
+classloader.resolve-order: parent-first
+```
+```shell
 # 创建hbase table
 create 'vehicle_info', 'vehicle_info'
 ```
