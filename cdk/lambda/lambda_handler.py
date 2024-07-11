@@ -11,7 +11,7 @@ def handler(event, context):
     the_bucket = event['ResourceProperties']['the_bucket']
     try:
         if the_event in ('Create', 'Update'):
-            with open('flink-java-project.jar', 'rb') as file_data:
+            with open('flink-java-project-0.1.jar', 'rb') as file_data:
                 s_3.put_object(Bucket=the_bucket,
                                Key=('flink-application.jar'), Body=file_data)
         elif the_event == 'Delete':
