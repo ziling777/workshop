@@ -1,11 +1,33 @@
 import cantools
 import random
 import time
-from kafka import KafkaProducer
+import sys
+from kafka import KafkaProducer, KafkaAdminClient
+from kafka.admin import NewTopic
 
 # Kafka配置
-bootstrap_servers = ['b-3.mskclustermskconnectla.rvmf3c.c7.kafka.us-east-2.amazonaws.com:9092']
-topic_name = 'ID268SystemPower'
+topic_names = ['ID268SystemPower', 'ID268SystemPowerKV']
+# 从命令行参数获取 Bootstrap Server 的 URL
+if len(sys.argv) < 2:
+    print("请提供 Bootstrap Server 的 URL 作为命令行参数。")
+    sys.exit(1)
+
+bootstrap_servers = [sys.argv[1]]
+
+# 创建Kafka管理客户端
+admin_client = KafkaAdminClient(bootstrap_servers=bootstrap_servers)
+
+# 获取现有Topic列表
+existing_topics = admin_client.list_topics()
+
+# 创建Topics
+topic_list = []
+for topic_name in topic_names:
+    if topic_name not in existing_topics:
+        topic_list.append(NewTopic(name=topic_name, num_partitions=1, replication_factor=1))
+
+if topic_list:
+    admin_client.create_topics(new_topics=topic_list, validate_only=False)
 
 # 创建Kafka生产者,配置明文传输
 producer = KafkaProducer(
@@ -50,10 +72,6 @@ def generate_system_power_message(db):
 
         data[signal_name] = random_value
 
-    print('Signal Values:')
-    for signal_name, value in data.items():
-        print(f'{signal_name}: {value}')
-
     encoded_data = message.encode(data)
     print(f'\nEncoded Data: {encoded_data.hex()}')
 
@@ -66,3 +84,4 @@ if __name__ == '__main__':
         message = generate_system_power_message(db)
         producer.send(topic_name, message)
         time.sleep(1)  # 等待1秒后再次生成消息
+
