@@ -3,7 +3,6 @@
 !cdk/jest.config.js
 *.d.ts
 node_modules
-cdk/lambda/*
 
 !cdk/lambda/*.jar
 !cdk/lambda/lambda_handler.py
