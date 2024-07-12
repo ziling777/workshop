@@ -108,8 +108,16 @@ export class CdkStack extends cdk.Stack {
                 'MSKBOOTSTRAP_SERVERS_KEY': '<place-holder>'
               },
             },
+            {
+              propertyGroupId: 'VpcConfiguration',
+              propertyMap: {
+                VpcId: vpc.vpcId,
+                SubnetIds: vpc.selectSubnets().subnetIds.join(','),
+                SecurityGroupIds: [securityGroup.securityGroupId].join(','),
+              },
+            }
           ],
-        }
+        },
       }
     });
 

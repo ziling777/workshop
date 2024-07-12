@@ -14,6 +14,9 @@ def handler(event, context):
             with open('flink-java-project-0.1.jar', 'rb') as file_data:
                 s_3.put_object(Bucket=the_bucket,
                                Key=('flink-application.jar'), Body=file_data)
+            with open('emr-flink-hbase-1.0.jar', 'rb') as file_data:
+                s_3.put_object(Bucket=the_bucket,
+                               Key=('emr-flink-hbase-1.0.jar'), Body=file_data)
         elif the_event == 'Delete':
             print("Deleting S3 content...")
             b_operator = boto3.resource('s3')
