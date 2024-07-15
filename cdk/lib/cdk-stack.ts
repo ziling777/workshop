@@ -100,6 +100,10 @@ export class CdkStack extends cdk.Stack {
           },
           codeContentType: 'ZIPFILE',
         },
+        vpcConfigurations: [{
+          subnetIds: privateSubnetIds,
+          securityGroupIds: [defaultSecurityGroupId],
+        }],
         environmentProperties: {
           propertyGroups: [
             {
@@ -107,17 +111,9 @@ export class CdkStack extends cdk.Stack {
               propertyMap: {
                 'MSKBOOTSTRAP_SERVERS_KEY': '<place-holder>'
               },
-            },
-            {
-              propertyGroupId: 'VpcConfiguration',
-              propertyMap: {
-                VpcId: vpc.vpcId,
-                SubnetIds: vpc.selectSubnets().subnetIds.join(','),
-                SecurityGroupIds: [securityGroup.securityGroupId].join(','),
-              },
             }
           ],
-        },
+        }
       }
     });
 
