@@ -82,6 +82,6 @@ if __name__ == '__main__':
 
     while True:
         message = generate_system_power_message(db)
-        producer.send(topic_name, message)
+        producer.send('ID268SystemPower', message)
         time.sleep(1)  # 等待1秒后再次生成消息
 
